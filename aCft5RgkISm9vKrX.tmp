@@ -1,3 +1,5 @@
+##{0:0:0:Sem_Project.prg}D:\Retro\Sem_Project\Sem_Project.asm
+
 *= $0801
         WORD $080B
         WORD 2021
@@ -17,3 +19,4 @@ TitleScreen:
         .byte 5,6
         .text "Welcome to the PING PONG Games"
         .byte 0
+
