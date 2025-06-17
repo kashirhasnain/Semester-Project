@@ -1,19 +1,240 @@
-*= $0801
-        WORD $080B
-        WORD 2021
-        BYTE $9E
-        TEXT "2061"
-        BYTE 0
-        WORD 0
+; C64 Menu System - Fixed and Enhanced
+; Displays a menu and runs in VICE
 
-        *= $080D
+; Constants
+SCREEN_RAM   = $0400  ; Start of screen memory
+COLOR_RAM    = $D800  ; Start of color memory
+CURSOR_COL   = $02    ; Column for menu items
+MENU_START_Y = 10     ; Starting row for menu
 
-Start
-        SEI
-        CLD
-        JSR ClearScreen
+; Menu item indexes
+START    = 0
+CREDITS  = 1
+SOUNDS   = 2
+EXIT     = 3
 
-TitleScreen:
-        .byte 5,6
-        .text "Welcome to the PING PONG Games"
-        .byte 0
+; Kernal routines
+CHROUT   = $FFD2      ; Print character
+PLOT     = $FFF0      ; Set cursor position
+GETIN    = $FFE4      ; Get keyboard input
+CLRSCR   = $E544      ; Clear screen
+
+; BASIC stub (SYS 2064 to start at $0810)
+* = $0801
+BYTE 0, 10, 8, 0, 0, 158, 32, 104, 48, 54, 52, 0, 0
+
+* = $0810             ; Main program start
+
+main:
+    jsr CLRSCR        ; Clear screen
+
+    ; Set colors
+    lda #0
+    sta $D020         ; Border color (black)
+    sta $D021         ; Background color (black)
+    
+    ; Set text color to light grey
+    lda #14
+    jsr set_all_text_color
+
+    ; Print title
+    ldx #5            ; Row 5
+    ldy #(20 - 6)     ; Center "C64 MENU"
+    jsr set_cursor
+    ldx #0
+print_title:
+    lda title_text,x
+    jsr CHROUT
+    inx
+    cpx #title_len
+    bne print_title
+
+    ; Print menu items
+    ldx #MENU_START_Y
+    ldy #CURSOR_COL
+    jsr set_cursor
+    ldx #0
+print_menu:
+    lda menu_text,x
+    jsr CHROUT
+    inx
+    cpx #menu_len
+    bne print_menu
+
+    ; Initialize menu
+    lda #START        ; Default selection = "Start"
+    sta selection
+    jsr highlight_item
+
+; Main input loop
+input_loop:
+    jsr GETIN         ; Get key press
+    beq input_loop    ; Loop if no key
+
+    cmp #17           ; Down arrow
+    beq down_pressed
+    cmp #145          ; Up arrow
+    beq up_pressed
+    cmp #13           ; RETURN key
+    beq return_pressed
+    jmp input_loop
+
+; Handle down arrow
+down_pressed:
+    ldx selection
+    inx
+    cpx #(EXIT + 1)   ; Wrap to first item if past last
+    bne store_selection
+    ldx #START
+store_selection:
+    stx selection
+    jsr highlight_item
+    jmp input_loop
+
+; Handle up arrow
+up_pressed:
+    ldx selection
+    dex
+    bpl store_selection2 ; Wrap to last item if before first
+    ldx #EXIT
+store_selection2:
+    stx selection
+    jsr highlight_item
+    jmp input_loop
+
+; Handle RETURN key
+return_pressed:
+    lda selection
+    asl               ; Convert index to jump table offset
+    tax
+    lda action_table,x
+    sta jump_ptr
+    lda action_table+1,x
+    sta jump_ptr+1
+    jmp (jump_ptr)
+
+; Highlight selected menu item
+highlight_item:
+    ; Remove highlight from all items
+    ldx #3
+clear_highlight:
+    lda item_rows,x
+    tay
+    jsr clear_item_color
+    dex
+    bpl clear_highlight
+    
+    ; Highlight selected item
+    ldx selection
+    lda item_rows,x
+    tay
+    jsr highlight_item_color
+    rts
+
+; Set text color for entire screen
+; A = color to set
+set_all_text_color:
+    ldx #0
+color_loop:
+    sta COLOR_RAM,x
+    sta COLOR_RAM+250,x
+    sta COLOR_RAM+500,x
+    sta COLOR_RAM+750,x
+    inx
+    cpx #250
+    bne color_loop
+    rts
+
+; Clear highlight for a single item
+; Y = row number
+clear_item_color:
+    lda #14           ; Light grey
+    jmp set_item_color
+
+; Highlight a single item
+; Y = row number
+highlight_item_color:
+    lda #1            ; White
+set_item_color:
+    ldx #CURSOR_COL
+    clc
+    jsr calculate_color_pos
+    ldy #0
+    rts
+set_color:
+    sta (color_ptr),y
+    iny
+    cpy #7            ; Length of longest item
+    bne set_color
+    rts
+
+; Calculate color RAM position
+; Input: X = column, Y = row
+; Output: color_ptr = address in color RAM
+calculate_color_pos:
+    ; Calculate row offset: row * 40
+    lda #0
+    sta color_ptr+1
+    tya
+    asl               ; *2
+    asl               ; *4
+    asl               ; *8
+    sta color_ptr
+    asl               ; *16
+    rol color_ptr+1
+    asl               ; *32
+    clc
+    adc x
+    sta color_ptr
+    lda color_ptr+1
+    adc #0
+    sta color_ptr+1
+    clc
+    lda y
+    adc #0
+    sta color_ptr+2
+    lda #$D8
+    sta color_ptr+3
+    rts
+
+; Variables
+selection: BYTE 0 
+rts
+jump_ptr: BYTE .word 0
+
+; Action routines
+start_action:
+
+    ; Placeholder for start action
+    rts
+
+credits_action:
+    ; Placeholder for credits action
+    rts
+
+sounds_action:
+    ; Placeholder for sounds action
+    rts
+
+exit_action:
+    ; Placeholder for exit action
+    rts
+
+color_ptr: BYTE 0,0,0,0
+
+; Menu text
+menu_text:
+    BYTE "Start",0,"Credits",1,"Sounds",2,"Exit",3
+menu_len = * - menu_text
+rts
+; Item rows (screen rows for each menu item)
+item_rows:
+    BYTE MENU_START_Y, MENU_START_Y + 1, MENU_START_Y + 2, MENU_START_Y + 3
+rts
+
+; Action table (jump addresses for each menu item)
+action_table:
+    .word start_action, credits_action, sounds_action, exit_action
+
+
+
